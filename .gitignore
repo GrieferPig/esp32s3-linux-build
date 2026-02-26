@@ -7,3 +7,4 @@ toolchain/
 build-output/
 .config
 *.so
+*.log
