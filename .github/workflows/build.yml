@@ -24,7 +24,20 @@ jobs:
 
     - name: Build Docker image
       run: |
-        docker build -t esp32s3-linux .
+        docker build -t ghcr.io/grieferpig/esp32s3-linux-build:latest .
+
+    - name: Login to GHCR
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Push Docker image
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        docker push ghcr.io/grieferpig/esp32s3-linux-build:latest
 
     - name: Extract artifacts
       run: |
