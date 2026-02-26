@@ -6,59 +6,60 @@ This repository provides a Docker-based build environment for running Linux on t
 
 Before building or entering the environment for the first time:
 
-1. **Prepare the Host:** This script downloads the pre-built toolchain from the GitHub releases and performs shallow clones of the required source repositories (Buildroot, Kernel, etc.) directly to your host's filesystem.
+1. **Prepare the Host:**
    ```bash
    bash prepare_host.sh
    ```
 
-2. **Build the Docker Image:** Build the lean Ubuntu 24.04-based environment.
+2. **Build the Docker Image:**
    ```bash
    docker build -t esp32s3-linux .
    ```
 
+## Flash Offsets
+
+The build produces the following artifacts for flashing to the ESP32-S3:
+
+- `0x0000`   `bootloader.bin`
+- `0x8000`   `partition-table.bin`
+- `0x10000`  `network_adapter.bin`
+- `0xb0000`  `etc.jffs2`
+- `0x120000` `xipImage`
+- `0x480000` `rootfs.cramfs`
+
 ## Interactive Development
 
-To enter the build environment with all local sources and the toolchain correctly mounted:
+To enter the build environment:
 
 ```bash
 bash enter_env.sh
 ```
 
-The script handles:
-- Mounting `sources/`, `toolchain/`, and `build-output/`.
-- Ensuring correct permissions for the `esp32` user.
-- Building the `xtensa-dynconfig` library if missing.
+### Building ESP-Hosted (Inside the Container)
 
-### Common Build Commands (Inside the Container)
+```bash
+cd /app/sources/esp-hosted/esp_hosted_ng/esp/esp_driver
+git clone --recursive https://github.com/espressif/esp-idf.git -b v5.1 --depth 1 esp-idf
+cd esp-idf
+./install.sh esp32s3
+. ./export.sh
+cd ../network_adapter
+idf.py set-target esp32s3
+cp sdkconfig.defaults.esp32s3 sdkconfig
+idf.py build
+```
 
-- **Buildroot Configuration:**
-  ```bash
-  cd /app/sources/buildroot
-  make O=/app/build-output menuconfig
-  ```
+### Building Buildroot (Inside the Container)
 
-- **Kernel Configuration:**
-  ```bash
-  cd /app/sources/buildroot
-  make O=/app/build-output linux-menuconfig
-  ```
-
-- **Full Build:**
-  ```bash
-  cd /app/sources/buildroot
-  make O=/app/build-output
-  ```
+```bash
+cd /app/sources/buildroot
+make O=/app/build-output esp32s3_defconfig
+# The toolchain path and prefix are automatically set in the CI, 
+# for local builds ensure they match your mount points.
+make O=/app/build-output
+```
 
 ## GitHub Actions
 
-- **Toolchain Build:** Manually triggered to build the `xtensa-esp32s3-linux-uclibcfdpic` toolchain and publish it as a release.
-- **Main Build:** Manually triggered to perform a full Buildroot compilation using the latest environment and publish artifacts.
-
-## File Structure
-
-- `sources/`: Cloned source repositories (ignored by git).
-- `toolchain/`: Downloaded toolchain (ignored by git).
-- `build-output/`: Build artifacts and intermediate files (ignored by git).
-- `Dockerfile`: Lean environment definition.
-- `prepare_host.sh`: Host environment setup script.
-- `enter_env.sh`: Interactive environment entry script.
+- **Toolchain Build:** Manually triggered to build the toolchain.
+- **Main Build:** Manually triggered to perform a full compilation and publish artifacts with flash offsets.

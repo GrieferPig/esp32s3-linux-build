@@ -1,0 +1,121 @@
+# Dockerfile port of https://gist.github.com/jcmvbkbc/316e6da728021c8ff670a24e674a35e6
+# wifi details http://wiki.osll.ru/doku.php/etc:users:jcmvbkbc:linux-xtensa:esp32s3wifi
+# Modified by Chandler Klüser
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    unzip \
+    rsync \
+    wget \
+    bzip2 \
+    cpio \
+    bc \
+    gperf \
+    bison \
+    flex \
+    texinfo \
+    help2man \
+    gawk \
+    libssl-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-setuptools \
+    python3-wheel \
+    python-is-python3 \
+    libtool \
+    libtool-bin \
+    autoconf \
+    automake \
+    libexpat1-dev \
+    libgmp-dev \
+    libmpfr-dev \
+    libmpc-dev \
+    libisl-dev \
+    ninja-build \
+    cmake \
+    device-tree-compiler \
+    curl \
+    libusb-1.0-0 \
+    libusb-1.0-0-dev
+
+WORKDIR /app
+
+# dynconfig
+RUN git clone https://github.com/jcmvbkbc/xtensa-dynconfig -b original --depth=1 && \
+    git clone https://github.com/jcmvbkbc/config-esp32s3 esp32s3 --depth=1 && \
+    make -C xtensa-dynconfig ORIG=1 CONF_DIR=`pwd` esp32s3.so
+ENV XTENSA_GNU_CONFIG="/app/xtensa-dynconfig/esp32s3.so"
+
+# ct-ng cannot run as root
+RUN useradd -m -s /bin/bash esp32
+RUN chown -R esp32:esp32 /app
+USER esp32
+ENV PATH="/home/esp32/.local/bin:${PATH}"
+
+# toolchain
+RUN mkdir -p /app/build && cd /app/build && \
+    git clone https://github.com/jcmvbkbc/crosstool-NG.git -b xtensa-fdpic --depth=1 && \
+    cd crosstool-NG && \
+    ./bootstrap && \
+    ./configure --enable-local && \
+    make && \
+    ./ct-ng xtensa-esp32s3-linux-uclibcfdpic && \
+    ./ct-ng build || (tail -n 100 build.log && exit 1)
+
+# Verify toolchain
+RUN [ -e /home/esp32/x-tools/xtensa-esp32s3-linux-uclibcfdpic/bin/xtensa-esp32s3-linux-uclibcfdpic-gcc ] || exit 1
+
+#
+# bootloader
+#
+ENV IDF_PATH="/app/build/esp-hosted/esp_hosted_ng/esp/esp_driver/esp-idf"
+RUN cd /app/build && \
+    git clone https://github.com/jcmvbkbc/esp-hosted -b ipc --recursive --depth 1 --shallow-submodules && \
+    cd esp-hosted/esp_hosted_ng/esp/esp_driver && \
+    cmake . && \
+    cd esp-idf && \
+    # Remove gdbgui as it's not needed for build and causes issues
+    sed -i '/gdbgui/d' requirements.txt && \
+    ./install.sh esp32s3 && \
+    # Force install compatible setuptools in the venv
+    /home/esp32/.espressif/python_env/idf4.4_py3.10_env/bin/python -m pip install "setuptools<70" && \
+    . ./export.sh && \
+    cd ../network_adapter && \
+    idf.py set-target esp32s3 && \
+    cp sdkconfig.defaults.esp32s3 sdkconfig && \
+    idf.py build
+
+#
+# kernel and rootfs
+#
+RUN cd /app/build && \
+        git clone https://github.com/jcmvbkbc/buildroot -b xtensa-2024.02-fdpic && \
+        make -C buildroot O=`pwd`/build-buildroot-esp32s3 esp32s3_defconfig && \
+        buildroot/utils/config --file build-buildroot-esp32s3/.config --set-str TOOLCHAIN_EXTERNAL_PATH /home/esp32/x-tools/xtensa-esp32s3-linux-uclibcfdpic && \
+        buildroot/utils/config --file build-buildroot-esp32s3/.config --set-str TOOLCHAIN_EXTERNAL_PREFIX '$(ARCH)-esp32s3-linux-uclibcfdpic' && \
+        buildroot/utils/config --file build-buildroot-esp32s3/.config --set-str TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX '$(ARCH)-esp32s3-linux-uclibcfdpic' && \
+        # Set a reasonable parallelism level to avoid race conditions
+        buildroot/utils/config --file build-buildroot-esp32s3/.config --set-val BR2_JLEVEL 4
+
+# Download sources separately
+RUN cd /app/build && make -C buildroot O=`pwd`/build-buildroot-esp32s3 source
+
+# Final build
+RUN cd /app/build && \
+        find buildroot build-buildroot-esp32s3 -type f -exec touch {} + || true && \
+        rm -rf build-buildroot-esp32s3/target && \
+        make -C buildroot O=`pwd`/build-buildroot-esp32s3
+
+RUN cp /app/build/build-buildroot-esp32s3/build/linux-*-esp32-tag/arch/xtensa/boot/dts/esp32s3-devkit-c1.dtb /app/build/esp32s3.dtb
+
+USER root
+CMD ["/bin/bash"]
