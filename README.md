@@ -30,15 +30,23 @@ esptool.py --chip esp32s3 -p /dev/ttyUSB0 -b 921600 \
 Note: This build requires an ESP32-S3 with **8MB PSRAM** (e.g., N8R8 or N16R8).
 
 
-## Interactive Configuration
+## Interactive Configuration (with Sync)
 
-To modify the build configurations interactively, enter the container:
+To modify configurations and have changes reflect locally in your root folder:
 
 ```bash
-docker run -it --rm esp32s3-linux /bin/bash
+docker run -it --rm \
+  -v $(pwd)/buildroot.config:/tmp/buildroot.config \
+  -v $(pwd)/kernel.config:/tmp/kernel.config \
+  -v $(pwd)/crosstool-ng.config:/tmp/crosstool-ng.config \
+  esp32s3-linux /bin/bash -c "
+    ln -sf /tmp/buildroot.config /app/build/build-buildroot-esp32s3/.config && \
+    ln -sf /tmp/kernel.config /app/build/build-buildroot-esp32s3/build/linux-*-esp32-tag/.config && \
+    ln -sf /tmp/crosstool-ng.config /app/build/crosstool-NG/.config && \
+    /bin/bash"
 ```
 
-Inside the container, use the following commands:
+Inside the container, run `make menuconfig` or `make linux-menuconfig` as usual. Changes will persist to your local files.
 
 - **Buildroot Configuration:**
   ```bash

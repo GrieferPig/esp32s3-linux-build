@@ -115,5 +115,7 @@ RUN cd /app/build && \
         rm -rf build-buildroot-esp32s3/target && \
         make -C buildroot O=`pwd`/build-buildroot-esp32s3
 
+RUN cp /app/build/build-buildroot-esp32s3/build/linux-*-esp32-tag/arch/xtensa/boot/dts/esp32s3-devkit-c1.dtb /app/build/esp32s3.dtb
+
 USER root
 CMD ["/bin/bash"]
