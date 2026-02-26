@@ -2,40 +2,52 @@
 # wifi details http://wiki.osll.ru/doku.php/etc:users:jcmvbkbc:linux-xtensa:esp32s3wifi
 # Modified by Chandler Klüser
 
-FROM archlinux:latest
+FROM ubuntu:22.04
 
-# Update GPG Signatures before system update
-RUN pacman-key --refresh-keys && \
-    pacman-key --init
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Package Update + Installation
-RUN pacman -Syu --noconfirm && \
-    pacman -S --noconfirm base-devel git unzip rsync gcc make cmake wget bzip2 cpio bc gperf bison flex texinfo help2man gawk openssl zlib ncurses
-
-# Python 3.10 required, not 3.11
-RUN curl -O https://www.python.org/ftp/python/3.10.0/Python-3.10.0.tgz && \
-    tar -xf Python-3.10.0.tgz && \
-    cd Python-3.10.0 && \
-    ./configure && \
-    make && \
-    make install && \
-    ln -s /usr/bin/python3 /usr/bin/python
-
-# Install virtualenv using pip
-RUN python3 -m ensurepip && \
-    python3 -m pip install --upgrade pip && \
-    python3 -m pip install virtualenv
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    unzip \
+    rsync \
+    wget \
+    bzip2 \
+    cpio \
+    bc \
+    gperf \
+    bison \
+    flex \
+    texinfo \
+    help2man \
+    gawk \
+    libssl-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-setuptools \
+    python3-wheel \
+    python-is-python3 \
+    libtool \
+    libtool-bin \
+    autoconf \
+    automake \
+    libexpat1-dev \
+    libgmp-dev \
+    libmpfr-dev \
+    libmpc-dev \
+    libisl-dev \
+    ninja-build \
+    cmake \
+    device-tree-compiler \
+    curl \
+    libusb-1.0-0 \
+    libusb-1.0-0-dev
 
 WORKDIR /app
-
-# install autoconf 2.71
-RUN wget https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.xz && \
-    tar -xf autoconf-2.71.tar.xz && \
-    cd autoconf-2.71 && \
-    ./configure --prefix=`pwd`/root && \
-    make && \
-    make install
-ENV PATH="$PATH:/app/autoconf-2.71/root/bin"
 
 # dynconfig
 RUN git clone https://github.com/jcmvbkbc/xtensa-dynconfig -b original --depth=1 && \
@@ -43,72 +55,65 @@ RUN git clone https://github.com/jcmvbkbc/xtensa-dynconfig -b original --depth=1
     make -C xtensa-dynconfig ORIG=1 CONF_DIR=`pwd` esp32s3.so
 ENV XTENSA_GNU_CONFIG="/app/xtensa-dynconfig/esp32s3.so"
 
-# ct-ng cannot run as root, we'll just do everything else as a user
-RUN useradd -d /app/build -u 3232 esp32 && mkdir build && chown esp32:esp32 build
+# ct-ng cannot run as root
+RUN useradd -m -s /bin/bash esp32
+RUN chown -R esp32:esp32 /app
 USER esp32
+ENV PATH="/home/esp32/.local/bin:${PATH}"
 
 # toolchain
-RUN cd build && \
+RUN mkdir -p /app/build && cd /app/build && \
     git clone https://github.com/jcmvbkbc/crosstool-NG.git -b xtensa-fdpic --depth=1 && \
     cd crosstool-NG && \
     ./bootstrap && \
     ./configure --enable-local && \
     make && \
     ./ct-ng xtensa-esp32s3-linux-uclibcfdpic && \
-    CT_PREFIX=`pwd`/builds ./ct-ng build || echo "Completed"  # the complete ct-ng build fails but we still get what we wanted!
-RUN [ -e build/crosstool-NG/builds/xtensa-esp32s3-linux-uclibcfdpic/bin/xtensa-esp32s3-linux-uclibcfdpic-gcc ] || exit 1
+    ./ct-ng build || (tail -n 100 build.log && exit 1)
+
+# Verify toolchain
+RUN [ -e /home/esp32/x-tools/xtensa-esp32s3-linux-uclibcfdpic/bin/xtensa-esp32s3-linux-uclibcfdpic-gcc ] || exit 1
 
 #
 # bootloader
 #
 ENV IDF_PATH="/app/build/esp-hosted/esp_hosted_ng/esp/esp_driver/esp-idf"
-RUN cd build && \
-git clone https://github.com/jcmvbkbc/esp-hosted -b ipc && \
-cd esp-hosted/esp_hosted_ng/esp/esp_driver && \
-cmake . && \
-cd esp-idf && \
-. ./export.sh && \
-cd ../network_adapter && \
-idf.py set-target esp32s3 && \
-cp sdkconfig.defaults.esp32s3 sdkconfig && \
-idf.py build
+RUN cd /app/build && \
+    git clone https://github.com/jcmvbkbc/esp-hosted -b ipc --recursive --depth 1 --shallow-submodules && \
+    cd esp-hosted/esp_hosted_ng/esp/esp_driver && \
+    cmake . && \
+    cd esp-idf && \
+    # Remove gdbgui as it's not needed for build and causes issues
+    sed -i '/gdbgui/d' requirements.txt && \
+    ./install.sh esp32s3 && \
+    # Force install compatible setuptools in the venv
+    /home/esp32/.espressif/python_env/idf4.4_py3.10_env/bin/python -m pip install "setuptools<70" && \
+    . ./export.sh && \
+    cd ../network_adapter && \
+    idf.py set-target esp32s3 && \
+    cp sdkconfig.defaults.esp32s3 sdkconfig && \
+    idf.py build
 
 #
 # kernel and rootfs
 #
-RUN cd build && \ 
-	git clone https://github.com/jcmvbkbc/buildroot -b xtensa-2024.02-fdpic && \
-	make -C buildroot O=`pwd`/build-buildroot-esp32s3 esp32s3_defconfig && \
-	buildroot/utils/config --file build-buildroot-esp32s3/.config --set-str TOOLCHAIN_EXTERNAL_PATH `pwd`/crosstool-NG/builds/xtensa-esp32s3-linux-uclibcfdpic && \
-	buildroot/utils/config --file build-buildroot-esp32s3/.config --set-str TOOLCHAIN_EXTERNAL_PREFIX '$(ARCH)-esp32s3-linux-uclibcfdpic' && \
-	buildroot/utils/config --file build-buildroot-esp32s3/.config --set-str TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX '$(ARCH)-esp32s3-linux-uclibcfdpic' && \
-	make -C buildroot O=`pwd`/build-buildroot-esp32s3
+RUN cd /app/build && \
+        git clone https://github.com/jcmvbkbc/buildroot -b xtensa-2024.02-fdpic && \
+        make -C buildroot O=`pwd`/build-buildroot-esp32s3 esp32s3_defconfig && \
+        buildroot/utils/config --file build-buildroot-esp32s3/.config --set-str TOOLCHAIN_EXTERNAL_PATH /home/esp32/x-tools/xtensa-esp32s3-linux-uclibcfdpic && \
+        buildroot/utils/config --file build-buildroot-esp32s3/.config --set-str TOOLCHAIN_EXTERNAL_PREFIX '$(ARCH)-esp32s3-linux-uclibcfdpic' && \
+        buildroot/utils/config --file build-buildroot-esp32s3/.config --set-str TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX '$(ARCH)-esp32s3-linux-uclibcfdpic' && \
+        # Set a reasonable parallelism level to avoid race conditions
+        buildroot/utils/config --file build-buildroot-esp32s3/.config --set-val BR2_JLEVEL 4
 
-# keep docker running so we can debug/rebuild :)
+# Download sources separately
+RUN cd /app/build && make -C buildroot O=`pwd`/build-buildroot-esp32s3 source
+
+# Final build
+RUN cd /app/build && \
+        find buildroot build-buildroot-esp32s3 -type f -exec touch {} + || true && \
+        rm -rf build-buildroot-esp32s3/target && \
+        make -C buildroot O=`pwd`/build-buildroot-esp32s3
+
 USER root
-CMD ["sh"]
-
-#
-# flash
-#
-# activate idf.py with . ./export.sh
-# copy bootloader.bin partition-table.bin network_adapter.bin xipImage rootfs.cramfs and etc.jffs2 to your host machine
-# flash bootloader, partition table and network adapter
-# esptool.py --chip esp32s3 -p /dev/ttyACM0 -b 921600 --before=default_reset --after=hard_reset write_flash 0x0 bootloader.bin 0x10000 network_adapter.bin 0x8000 partition-table.bin
-# flash the system partitions
-# parttool.py -p /dev/ttyACM0 -b 921600 write_partition --partition-name linux  --input xipImage
-# parttool.py -p /dev/ttyACM0 -b 921600 write_partition --partition-name rootfs --input rootfs.cramfs
-# parttool.py -p /dev/ttyACM0 -b 921600 write_partition --partition-name etc --input etc.jffs2
-
-# Second Method - Running inside container
-
-# run container from image:
-# sudo docker run --device=/dev/ttyACM0 -it esp32s3-linux
-
-# Download Tools for ESP32S3 Flashing
-# /app/build/esp-hosted/esp_hosted_ng/esp/esp_driver/esp-idf/install.sh
-# esptool.py --chip esp32s3 -p /dev/ttyACM0 -b 921600 --before=default_reset --after=hard_reset write_flash 0x0 ./build/esp-hosted/esp_hosted_ng/esp/esp_driver/network_adapter/build/bootloader/bootloader.bin 0x10000 ./build/esp-hosted/esp_hosted_ng/esp/esp_driver/network_adapter/build/network_adapter.bin 0x8000 ./build/esp-hosted/esp_hosted_ng/esp/esp_driver/network_adapter/build/partition_table/partition-table.bin
-
-# parttool.py -p /dev/ttyACM0 -b 921600 write_partition --partition-name linux  --input ./build/build-buildroot-esp32s3/images/xipImage
-# parttool.py -p /dev/ttyACM0 -b 921600 write_partition --partition-name rootfs --input ./build/build-buildroot-esp32s3/images/rootfs.cramfs
-# parttool.py -p /dev/ttyACM0 -b 921600 write_partition --partition-name etc --input ./build/build-buildroot-esp32s3/images/etc.jffs2
+CMD ["/bin/bash"]

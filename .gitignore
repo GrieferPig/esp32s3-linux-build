@@ -1,0 +1,4 @@
+build/
+*.config
+*.so
+extract_artifacts.sh
