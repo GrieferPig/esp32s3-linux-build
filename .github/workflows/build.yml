@@ -43,17 +43,6 @@ jobs:
           ghcr.io/${{ github.repository }}:latest /bin/bash -c "
             # Build dynconfig .so
             make -C /app/sources/xtensa-dynconfig ORIG=1 CONF_DIR=/app/sources/config-esp32s3 esp32s3.so && \
-            # Build bootloader (esp-hosted)
-            cd /app/sources/esp-hosted/esp_hosted_ng/esp/esp_driver && \
-            cmake . && \
-            cd esp-idf && \
-            sed -i '/gdbgui/d' requirements.txt && \
-            ./install.sh esp32s3 && \
-            . ./export.sh && \
-            cd ../network_adapter && \
-            idf.py set-target esp32s3 && \
-            cp sdkconfig.defaults.esp32s3 sdkconfig && \
-            idf.py build && \
             # Build Buildroot
             cd /app/sources/buildroot && \
             make O=/app/build-output esp32s3_defconfig && \

@@ -2,3 +2,8 @@ build/
 *.config
 *.so
 extract_artifacts.sh
+sources/
+toolchain/
+build-output/
+.config
+*.so

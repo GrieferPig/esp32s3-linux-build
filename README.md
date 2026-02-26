@@ -2,66 +2,63 @@
 
 This repository provides a Docker-based build environment for running Linux on the ESP32-S3.
 
-## Building Locally
+## Initial Setup
 
-To build the environment and extract the artifacts:
+Before building or entering the environment for the first time:
 
-```bash
-# Build the Docker image
-docker build -t esp32s3-linux .
+1. **Prepare the Host:** This script downloads the pre-built toolchain from the GitHub releases and performs shallow clones of the required source repositories (Buildroot, Kernel, etc.) directly to your host's filesystem.
+   ```bash
+   bash prepare_host.sh
+   ```
 
-# Extract artifacts to build/ and configs to root
-bash extract_artifacts.sh
-```
+2. **Build the Docker Image:** Build the lean Ubuntu 24.04-based environment.
+   ```bash
+   docker build -t esp32s3-linux .
+   ```
 
-## Flashing
+## Interactive Development
 
-To flash the artifacts to your ESP32-S3, you can use `esptool.py`. Replace `/dev/ttyUSB0` with your actual serial port:
-
-```bash
-esptool --chip esp32s3 -b 921600 --before default_reset --after hard_reset write_flash 0x0000 bootloader.bin 0x8000 partition-table.bin 0x10000 network_adapter.bin 0xb0000 etc.jffs2 0x120000 xipImage 0x480000 rootfs.cramfs
-```
-
-Note: This build requires an ESP32-S3 with **8MB PSRAM** (e.g., N8R8 or N16R8).
-
-## Interactive Configuration (with Sync)
-
-To modify configurations and have changes reflect locally in your root folder:
+To enter the build environment with all local sources and the toolchain correctly mounted:
 
 ```bash
-docker run -it --rm \
-  -v $(pwd)/buildroot.config:/tmp/buildroot.config \
-  -v $(pwd)/kernel.config:/tmp/kernel.config \
-  -v $(pwd)/crosstool-ng.config:/tmp/crosstool-ng.config \
-  esp32s3-linux /bin/bash -c "
-    ln -sf /tmp/buildroot.config /app/build/build-buildroot-esp32s3/.config && \
-    ln -sf /tmp/kernel.config /app/build/build-buildroot-esp32s3/build/linux-*-esp32-tag/.config && \
-    ln -sf /tmp/crosstool-ng.config /app/build/crosstool-NG/.config && \
-    /bin/bash"
+bash enter_env.sh
 ```
 
-Inside the container, run `make menuconfig` or `make linux-menuconfig` as usual. Changes will persist to your local files.
+The script handles:
+- Mounting `sources/`, `toolchain/`, and `build-output/`.
+- Ensuring correct permissions for the `esp32` user.
+- Building the `xtensa-dynconfig` library if missing.
+
+### Common Build Commands (Inside the Container)
 
 - **Buildroot Configuration:**
-
   ```bash
-  cd /app/build/buildroot
-  make O=/app/build/build-buildroot-esp32s3 menuconfig
+  cd /app/sources/buildroot
+  make O=/app/build-output menuconfig
   ```
 
 - **Kernel Configuration:**
-
   ```bash
-  cd /app/build/buildroot
-  make O=/app/build/build-buildroot-esp32s3 linux-menuconfig
+  cd /app/sources/buildroot
+  make O=/app/build-output linux-menuconfig
+  ```
+
+- **Full Build:**
+  ```bash
+  cd /app/sources/buildroot
+  make O=/app/build-output
   ```
 
 ## GitHub Actions
 
-The repository includes a GitHub Action that automatically builds the image and creates a release with the following artifacts:
+- **Toolchain Build:** Manually triggered to build the `xtensa-esp32s3-linux-uclibcfdpic` toolchain and publish it as a release.
+- **Main Build:** Manually triggered to perform a full Buildroot compilation using the latest environment and publish artifacts.
 
-- Kernel (`xipImage`) and Device Tree (`.dtb`)
-- RootFS images (`rootfs.cramfs`, `etc.jffs2`)
-- Bootloader and Network Adapter binaries
-- Full RootFS tarball
-- Configuration files (`buildroot.config`, `kernel.config`, `crosstool-ng.config`)
+## File Structure
+
+- `sources/`: Cloned source repositories (ignored by git).
+- `toolchain/`: Downloaded toolchain (ignored by git).
+- `build-output/`: Build artifacts and intermediate files (ignored by git).
+- `Dockerfile`: Lean environment definition.
+- `prepare_host.sh`: Host environment setup script.
+- `enter_env.sh`: Interactive environment entry script.

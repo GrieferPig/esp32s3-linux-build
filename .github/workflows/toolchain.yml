@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-toolchain:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
@@ -28,7 +28,10 @@ jobs:
       run: |
         git clone https://github.com/jcmvbkbc/xtensa-dynconfig -b original --depth=1
         git clone https://github.com/jcmvbkbc/config-esp32s3 esp32s3 --depth=1
-        make -C xtensa-dynconfig ORIG=1 CONF_DIR=`pwd` esp32s3.so
+        # Restructure for Makefile
+        mkdir config
+        mv esp32s3 config/
+        make -C xtensa-dynconfig ORIG=1 CONF_DIR=`pwd`/config esp32s3.so
 
     - name: Build Crosstool-NG and Toolchain
       run: |

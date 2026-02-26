@@ -35,4 +35,13 @@ if [ ! -d "sources/buildroot" ]; then
     git clone https://github.com/jcmvbkbc/buildroot -b xtensa-2024.02-fdpic --depth 1 sources/buildroot
 fi
 
+# Restructure config-esp32s3 to match xtensa-dynconfig Makefile expectation
+if [ -d "sources/config-esp32s3" ] && [ ! -d "sources/config-esp32s3/esp32s3" ]; then
+    echo "Restructuring config-esp32s3..."
+    cd sources/config-esp32s3
+    mkdir -p esp32s3
+    mv binutils gcc gdb xtensa esp32s3/
+    cd ../..
+fi
+
 echo "Host preparation complete."
