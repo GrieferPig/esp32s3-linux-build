@@ -111,6 +111,12 @@ Once the build is complete, you should find the following artifacts to be flashe
 - **0x120000** - Linux Kernel (XIP): `/app/build-output/images/xipImage`
 - **0x480000** - CramFS RootFS: `/app/build-output/images/rootfs.cramfs`
 
+## Flash command
+
+```bash
+esptool.py --chip esp32s3 -p /dev/ttyUSB0 -b 921600 --before default_reset --after hard_reset write_flash 0x0000 build/bootloader.bin 0x8000 build/partition-table.bin 0x10000 build/network_adapter.bin 0xb0000 build/etc.jffs2 0x120000 build/xipImage 0x480000 build/rootfs.cramfs
+```
+
 ## GitHub Actions
 
 - **Toolchain Build:** Manually triggered to build the `xtensa-esp32s3-linux-uclibcfdpic` toolchain and publish it as a release.
