@@ -153,7 +153,6 @@ su esp32 -c '
   /app/sources/buildroot/utils/config --file /app/build-output/.config --set-val BR2_JLEVEL $(nproc)
   
   make O=/app/build-output source
-  rm -rf /app/build-output/target
   make O=/app/build-output
 '
 EOF
