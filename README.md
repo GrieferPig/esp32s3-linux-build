@@ -7,21 +7,23 @@ This repository provides a Docker-based build environment for compiling Linux an
 Before building or entering the environment for the first time:
 
 1. **Prepare the Host:** This script downloads the pre-built toolchain from the GitHub releases and performs shallow clones of the required source repositories (Buildroot, Kernel, ESP-Hosted, etc.) directly to your host's filesystem.
+
    ```bash
    bash prepare_host.sh
    ```
 
 2. **Build the Docker Image:** Build the lean Ubuntu 24.04-based environment.
+
    ```bash
    docker build -t esp32s3-linux .
    ```
 
 ## Automated Test Build
 
-To run an automated full build process that compiles both ESP-Hosted and Buildroot, and validates artifact generation, use the provided test script:
+To run an automated full build process that compiles both ESP-Hosted and Buildroot, and validates artifact generation, use the provided script:
 
 ```bash
-bash test_build.sh
+bash build.sh
 ```
 
 ## Interactive Development
@@ -33,6 +35,7 @@ bash enter_env.sh
 ```
 
 The script handles:
+
 - Mounting `sources/`, `toolchain/`, and `build-output/`.
 - Ensuring correct permissions for the `esp32` user.
 - Building the `xtensa-dynconfig` library if missing.
@@ -42,7 +45,9 @@ The script handles:
 Once inside the container, you can manually trigger the build processes:
 
 #### 1. Build ESP-Hosted Firmware (Bootloader, Partition Table, Network Adapter)
+
 This requires setting up the ESP-IDF environment. Note the requirement to bypass the system package warning for Python 3.12:
+
 ```bash
 export PIP_BREAK_SYSTEM_PACKAGES=1
 export IDF_PATH=/app/sources/esp-hosted/esp_hosted_ng/esp/esp_driver/esp-idf
@@ -61,6 +66,7 @@ idf.py build
 ```
 
 #### 2. Build Buildroot (Kernel, Rootfs, DTB)
+
 ```bash
 cd /app/sources/buildroot
 make O=/app/build-output esp32s3_defconfig
@@ -81,12 +87,14 @@ make O=/app/build-output
 ### Configuration (Inside the Container)
 
 - **Buildroot Menuconfig:**
+
   ```bash
   cd /app/sources/buildroot
   make O=/app/build-output menuconfig
   ```
 
 - **Kernel Menuconfig:**
+
   ```bash
   cd /app/sources/buildroot
   make O=/app/build-output linux-menuconfig
