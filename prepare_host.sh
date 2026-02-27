@@ -32,7 +32,7 @@ if [ ! -d "sources/esp-hosted" ]; then
 fi
 
 if [ ! -d "sources/buildroot" ]; then
-    git clone https://github.com/jcmvbkbc/buildroot -b xtensa-2024.02-fdpic --depth 1 sources/buildroot
+    git clone https://github.com/jcmvbkbc/buildroot -b xtensa-2025.08-fdpic --depth 1 sources/buildroot
 fi
 
 # Restructure config-esp32s3 to match xtensa-dynconfig Makefile expectation
