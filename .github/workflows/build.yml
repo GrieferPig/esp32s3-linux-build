@@ -30,20 +30,6 @@ jobs:
     - name: Run Build Process
       run: bash build.sh
 
-    - name: Login to GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.repository_owner }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Push Environment Image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: ghcr.io/${{ github.repository }}:latest
-
     - name: Prepare Release Artifacts
       run: |
         mkdir -p release_artifacts

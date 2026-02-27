@@ -120,6 +120,12 @@ su esp32 -c '
   if [ ! -d "esp-idf" ] || [ ! -f "esp-idf/export.sh" ]; then
     cmake .
   fi
+  # Always ensure wireless libraries are replaced, as cmake . might be skipped
+  for arch in esp32 esp32c3 esp32s2 esp32s3; do
+    if [ -d "lib/$arch" ]; then
+      cp lib/$arch/*.a esp-idf/components/esp_wifi/lib/$arch/
+    fi
+  done
   cd esp-idf
   if [ -f "requirements.txt" ]; then
     sed -i "/gdbgui/d" requirements.txt
@@ -140,7 +146,7 @@ EOF
 echo "--- BUILDING BUILDROOT ---"
 su esp32 -c '
   cd /app/sources/buildroot
-  make O=/app/build-output esp32s3_defconfig
+  make O=/app/build-output esp32s3_devkit_c1_8m_defconfig
   /app/sources/buildroot/utils/config --file /app/build-output/.config --set-str TOOLCHAIN_EXTERNAL_PATH /app/toolchain/xtensa-esp32s3-linux-uclibcfdpic
   /app/sources/buildroot/utils/config --file /app/build-output/.config --set-str TOOLCHAIN_EXTERNAL_PREFIX "\$(ARCH)-esp32s3-linux-uclibcfdpic"
   /app/sources/buildroot/utils/config --file /app/build-output/.config --set-str TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX "\$(ARCH)-esp32s3-linux-uclibcfdpic"
